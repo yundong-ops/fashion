@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: fitmate
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: TRYON_PROVIDER
+        value: hf
+      - key: HF_SPACE
+        value: yisol/IDM-VTON

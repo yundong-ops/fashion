@@ -51,22 +51,19 @@ export interface CatalogItem {
 
 // 사용자 프로필
 
-export type BodyType = '스트레이트' | '웨이브' | '내추럴';
 export type ShoulderHip = 'shoulder-wider' | 'balanced' | 'hip-wider';
 export type TorsoLeg = 'long-torso' | 'balanced' | 'long-legs';
-export type FaceShape = '둥근형' | '계란형' | '각진형' | '긴형' | '역삼각형';
-export type PersonalColor = '웜톤' | '쿨톤' | '중성톤';
 export type BmiClass = '저체중' | '표준' | '과체중' | '비만';
 
-/** 비전 모델(Gemini)이 사진에서 산출하는 관찰 속성. cm 추정은 절대 시키지 않는다. */
-export interface VisionTraits {
-  bodyType: BodyType;
+/**
+ * 브라우저에서 TensorFlow.js MoveNet으로 뽑아낸 체형 근사치.
+ * 의료용 정확한 수치가 아니라 "의류 사이즈 추천에 참고할 근사치"이며,
+ * 카메라 각도·자세에 따라 오차가 클 수 있다.
+ */
+export interface PoseTraits {
   shoulderVsHip: ShoulderHip;
   torsoToLegRatio: TorsoLeg;
-  personalColor: PersonalColor;
-  faceShape: FaceShape;
-  shoulderSlope: 'straight' | 'sloped';
-  neckLength: 'short' | 'average' | 'long';
+  /** MoveNet 키포인트 평균 confidence (0~1). 낮으면 폴백 취급. */
   confidence: number;
 }
 
@@ -86,9 +83,8 @@ export interface BodyMetrics {
 
 export interface UserProfile {
   metrics: BodyMetrics;
-  traits: VisionTraits;
-  /** 비전 분석 실패 시 true — BMI 기반 폴백만 사용됨 */
-  degraded: boolean;
+  /** MoveNet 포즈 인식 실패 시 null — BMI 기반 폴백만 사용됨 */
+  pose: PoseTraits | null;
   createdAt: number;
 }
 
@@ -112,13 +108,6 @@ export interface Outfit {
 }
 
 // 피팅 파이프라인
-
-export interface TryOnRequest {
-  personPhoto: string; // data URL, 클라이언트에서만 사용 — 서버로는 Blob으로 전송
-  facePhoto: string;
-  topId: string;
-  bottomId: string;
-}
 
 export interface TryOnResponse {
   imageDataUrl: string;

@@ -184,6 +184,13 @@ body {
   margin-bottom: 24px;
 }
 
+.upload-grid.single {
+  grid-template-columns: 1fr;
+  max-width: 260px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .upload-slot {
   aspect-ratio: 3 / 4;
   border: 1.5px dashed var(--border-strong);

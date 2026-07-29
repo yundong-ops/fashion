@@ -1,20 +1,23 @@
 import { useRef, useState } from 'react';
-import type { CatalogItem, Outfit, UserProfile } from '../shared/types';
-import { CATALOG } from '../shared/catalog';
-import { pickOutfit, scoreItem } from '../shared/recommend';
+import type { CatalogItem, Outfit, PoseTraits, UserProfile } from '../shared/types';
+import { scoreItem } from '../shared/recommend';
 import { fitSize } from '../shared/sizing';
-import { analyzeProfile, requestTryOn } from './lib/api';
+import { buildProfile } from './lib/analyzeLocal';
+import { requestTryOn } from './lib/api';
 import { shortHash } from './lib/hash';
 import { getCached, setCached, clearCache } from './lib/tryonCache';
 import { Intro } from './screens/Intro';
+import { GarmentSelect } from './screens/GarmentSelect';
 import { BodyInput } from './screens/BodyInput';
-import { PhotoUpload, type PhotoSlot, type PreppedPhoto } from './screens/PhotoUpload';
+import { PhotoUpload, type PreppedPhoto } from './screens/PhotoUpload';
 import { Progress, type ProgressStage } from './screens/Progress';
 import { Result } from './screens/Result';
 import { ErrorScreen } from './screens/ErrorScreen';
 
 type AppScreen =
   | { name: 'intro' }
+  | { name: 'topSelect' }
+  | { name: 'bottomSelect' }
   | { name: 'bodyInput' }
   | { name: 'photoUpload' }
   | { name: 'progress'; stage: ProgressStage }
@@ -22,9 +25,12 @@ type AppScreen =
   | { name: 'error'; message: string };
 
 interface Session {
+  top: CatalogItem | null;
+  bottom: CatalogItem | null;
   height: number;
   weight: number;
-  photos: Record<PhotoSlot, PreppedPhoto> | null;
+  photo: PreppedPhoto | null;
+  pose: PoseTraits | null;
   profile: UserProfile | null;
   outfit: Outfit | null;
   imageUrl: string | null;
@@ -32,9 +38,12 @@ interface Session {
 }
 
 const EMPTY_SESSION: Session = {
+  top: null,
+  bottom: null,
   height: 0,
   weight: 0,
-  photos: null,
+  photo: null,
+  pose: null,
   profile: null,
   outfit: null,
   imageUrl: null,
@@ -45,6 +54,13 @@ async function fetchImageBlob(path: string): Promise<Blob> {
   const res = await fetch(path);
   if (!res.ok) throw new Error('상품 이미지를 불러오지 못했습니다');
   return res.blob();
+}
+
+function buildOutfit(top: CatalogItem, bottom: CatalogItem, profile: UserProfile): Outfit {
+  return {
+    top: { item: top, score: scoreItem(top, profile), fit: fitSize(top, profile.metrics) },
+    bottom: { item: bottom, score: scoreItem(bottom, profile), fit: fitSize(bottom, profile.metrics) },
+  };
 }
 
 export function App() {
@@ -65,50 +81,57 @@ export function App() {
   }
 
   async function runInitialGeneration(
+    top: CatalogItem,
+    bottom: CatalogItem,
     height: number,
     weight: number,
-    photos: Record<PhotoSlot, PreppedPhoto>,
+    photo: PreppedPhoto,
+    pose: PoseTraits | null,
   ) {
     setScreen({ name: 'progress', stage: 'analyzing' });
     try {
-      const profile = await analyzeProfile(height, weight);
+      const profile = buildProfile(height, weight, pose);
 
       setScreen({ name: 'progress', stage: 'selecting' });
-      const outfit = pickOutfit(CATALOG, profile);
-      if (!outfit) {
-        fail('추천할 수 있는 옷 조합을 찾지 못했어요.', () =>
-          runInitialGeneration(height, weight, photos),
-        );
-        return;
-      }
+      const outfit = buildOutfit(top, bottom, profile);
 
       setScreen({ name: 'progress', stage: 'generating' });
       const [topBlob, bottomBlob] = await Promise.all([
-        fetchImageBlob(outfit.top.item.imagePath),
-        fetchImageBlob(outfit.bottom.item.imagePath),
+        fetchImageBlob(top.imagePath),
+        fetchImageBlob(bottom.imagePath),
       ]);
       const resultBlob = await requestTryOn({
-        person: photos.full.blob,
-        face: photos.face.blob,
-        top: topBlob,
-        bottom: bottomBlob,
-        topDescription: outfit.top.item.detail,
-        bottomDescription: outfit.bottom.item.detail,
+        person: photo.blob,
+        topGarment: topBlob,
+        bottomGarment: bottomBlob,
+        topDescription: top.detail,
+        bottomDescription: bottom.detail,
       });
 
       const imageUrl = URL.createObjectURL(resultBlob);
-      setSession((prev) => ({ ...prev, height, weight, photos, profile, outfit, imageUrl }));
+      setSession((prev) => ({
+        ...prev,
+        top,
+        bottom,
+        height,
+        weight,
+        photo,
+        pose,
+        profile,
+        outfit,
+        imageUrl,
+      }));
       setScreen({ name: 'result' });
     } catch (err) {
       fail(
         err instanceof Error ? err.message : '알 수 없는 오류가 발생했어요.',
-        () => runInitialGeneration(height, weight, photos),
+        () => runInitialGeneration(top, bottom, height, weight, photo, pose),
       );
     }
   }
 
   async function runSwap(slot: 'top' | 'bottom', item: CatalogItem) {
-    if (!session.photos || !session.profile || !session.outfit) return;
+    if (!session.photo || !session.profile || !session.outfit) return;
 
     const scored = { item, score: scoreItem(item, session.profile), fit: fitSize(item, session.profile.metrics) };
     const nextOutfit: Outfit =
@@ -117,7 +140,7 @@ export function App() {
     setSession((prev) => ({ ...prev, regenerating: true }));
 
     try {
-      const personHash = await shortHash(session.photos.full.blob);
+      const personHash = await shortHash(session.photo.blob);
       const cacheKey = `${personHash}:${nextOutfit.top.item.id}:${nextOutfit.bottom.item.id}`;
 
       let resultBlob = await getCached(cacheKey);
@@ -127,10 +150,9 @@ export function App() {
           fetchImageBlob(nextOutfit.bottom.item.imagePath),
         ]);
         resultBlob = await requestTryOn({
-          person: session.photos.full.blob,
-          face: session.photos.face.blob,
-          top: topBlob,
-          bottom: bottomBlob,
+          person: session.photo.blob,
+          topGarment: topBlob,
+          bottomGarment: bottomBlob,
           topDescription: nextOutfit.top.item.detail,
           bottomDescription: nextOutfit.bottom.item.detail,
         });
@@ -140,7 +162,7 @@ export function App() {
       const newUrl = URL.createObjectURL(resultBlob);
       setSession((prev) => {
         if (prev.imageUrl) URL.revokeObjectURL(prev.imageUrl);
-        return { ...prev, outfit: nextOutfit, imageUrl: newUrl, regenerating: false };
+        return { ...prev, top: nextOutfit.top.item, bottom: nextOutfit.bottom.item, outfit: nextOutfit, imageUrl: newUrl, regenerating: false };
       });
     } catch (err) {
       setSession((prev) => ({ ...prev, regenerating: false }));
@@ -152,7 +174,37 @@ export function App() {
 
   switch (screen.name) {
     case 'intro':
-      return <Intro onStart={() => setScreen({ name: 'bodyInput' })} />;
+      return <Intro onStart={() => setScreen({ name: 'topSelect' })} />;
+
+    case 'topSelect':
+      return (
+        <GarmentSelect
+          key="top"
+          step="1 / 4"
+          category="top"
+          title="상의를 골라주세요"
+          subtitle="선택하면 어울리는 다른 상의도 함께 보여드려요"
+          onNext={(item) => {
+            setSession((prev) => ({ ...prev, top: item }));
+            setScreen({ name: 'bottomSelect' });
+          }}
+        />
+      );
+
+    case 'bottomSelect':
+      return (
+        <GarmentSelect
+          key="bottom"
+          step="2 / 4"
+          category="bottom"
+          title="하의를 골라주세요"
+          subtitle="선택하면 어울리는 다른 하의도 함께 보여드려요"
+          onNext={(item) => {
+            setSession((prev) => ({ ...prev, bottom: item }));
+            setScreen({ name: 'bodyInput' });
+          }}
+        />
+      );
 
     case 'bodyInput':
       return (
@@ -167,7 +219,10 @@ export function App() {
     case 'photoUpload':
       return (
         <PhotoUpload
-          onNext={(photos) => runInitialGeneration(session.height, session.weight, photos)}
+          onNext={(photo, pose) => {
+            if (!session.top || !session.bottom) return;
+            void runInitialGeneration(session.top, session.bottom, session.height, session.weight, photo, pose);
+          }}
         />
       );
 
@@ -183,7 +238,6 @@ export function App() {
           imageUrl={session.imageUrl}
           regenerating={session.regenerating}
           outfit={session.outfit}
-          catalog={CATALOG}
           onSwap={runSwap}
           onRestart={restart}
         />

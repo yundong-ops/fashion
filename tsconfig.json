@@ -13,10 +13,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "types": ["@cloudflare/workers-types", "vite/client"],
-    "paths": {
-      "@shared/*": ["./src/shared/*"]
-    }
+    "types": ["node", "vite/client"]
   },
   "include": ["src"]
 }

@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#ffffff"/>
-  <g transform="translate(256,256)">
-    <path d="M -90 -160 L 90 -160 L 100 -60 L 30 170 L 8 170 L 0 -30 L -8 170 L -30 170 L -100 -60 Z"
-          fill="#4a6fa5" stroke="#33507e" stroke-width="4"/>
-    <rect x="-90" y="-160" width="180" height="30" fill="#3d5c8a"/>
-  </g>
-  <text x="256" y="480" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#a1a1aa">스트레이트 데님 · 미드 블루</text>
-</svg>

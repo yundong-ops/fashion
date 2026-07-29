@@ -22,9 +22,9 @@ export function Intro({ onStart }: Props) {
 
       <div className="consent-box">
         <p>
-          <strong>사진은 서버에 저장되지 않습니다.</strong> 분석·이미지 생성을 위해 Cloudflare
-          Workers AI와 Google Gemini에 전송되며, 결과 이미지는 이 기기에만 저장됩니다. 언제든
-          "새로 시작하기"로 전체 삭제할 수 있어요.
+          <strong>사진은 서버에 저장되지 않습니다.</strong> 체형 분석은 이 기기(브라우저)에서
+          바로 처리되고, 착장 합성을 위해 사진이 외부 AI 모델(Hugging Face)로 일시 전송됩니다.
+          결과 이미지는 이 기기에만 저장되며, 언제든 "새로 시작하기"로 전체 삭제할 수 있어요.
         </p>
         <label className="consent-check">
           <input

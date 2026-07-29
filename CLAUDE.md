@@ -1,10 +1,23 @@
 # 핏메이트 (FitMate)
 
-패션을 잘 모르는 2030 남성을 위한 AI 가상 피팅 스타일 추천 웹. 상세 설계는
-`.claude/plans/` 또는 대화 히스토리의 최종 계획 문서를 참고. 요약:
-키·몸무게 + 사진 4장 → 체형/톤 분석 → 어울리는 상의·하의 추천 → 유저 사진에
-AI로 입혀서 보여줌 → 옷 클릭 시 상세정보 + 유사상품 5개 → 유사상품 클릭 시
-재생성.
+패션을 잘 모르는 2030 남성을 위한 AI 가상 피팅 스타일 추천 웹. 유저가 상의·하의를
+직접 고르면(유사 추천 포함) 전신 사진 한 장으로 체형을 분석하고, 실제로 입은 모습을
+합성해서 보여준다.
+
+**2026-07-29에 스택을 전면 전환했다**: Cloudflare Workers + Gemini/Workers AI 조합
+(마일스톤1 스켈레톤)을 버리고, **완전 무료 오픈소스 스택 + Node.js 서버**로 재작성.
+과거 계획 문서(`.claude/plans/`)는 Cloudflare 버전 기준이라 더 이상 정확하지 않다.
+
+## 유저 플로우
+
+1. 상의 선택 → CLIP 임베딩 기반 유사 추천 상의 노출 (선택 시 그걸로 교체 가능)
+2. 하의 선택 (동일하게 유사 추천)
+3. 키 / 몸무게 입력
+4. 전신 사진 한 장 업로드 (얼굴 포함, 정면)
+5. 브라우저에서 MoveNet으로 체형 분석 (실패 시 키/몸무게만으로 폴백)
+6. "합성하기" → 서버가 HF Space 호출(상의→하의 순 2회 체이닝) → 배경 제거 + 무드
+   보정 후처리 → 결과 이미지 표시
+7. 결과 화면에서 옷 클릭 → 상세정보 + 유사상품 → 클릭 시 재합성
 
 ## Git — 자동 푸시
 
@@ -12,73 +25,101 @@ AI로 입혀서 보여줌 → 옷 클릭 시 상세정보 + 유사상품 5개 �
 **의미 있는 작업 단위(마일스톤, 기능, 버그 수정)가 끝날 때마다 별도 요청 없이
 서술적 커밋 메시지로 커밋하고 `main`에 `git push` 한다.**
 
-## 배포 — 자동 배포
+## 배포 — Render.com
 
-Cloudflare 계정 ID `0c031e9a0d4ee8e3b87ba4df5f923e22`.
-`https://dash.cloudflare.com/0c031e9a0d4ee8e3b87ba4df5f923e22/pages/view/fashion`
-은 Cloudflare **Pages** 프로젝트(`fashion`) 대시보드 링크이지만, 이 저장소는
-**Workers** 구성(`wrangler.jsonc`: `name: fitmate`, 정적에셋 바인딩 + Hono
-API)을 그대로 유지하기로 결정했다(2026-07-29). 따라서 배포는
-`npm run deploy`(= `wrangler deploy`)로 하며, 결과물은 위 Pages URL이 아니라
-Cloudflare 대시보드의 **Workers & Pages → `fitmate`** 항목에 나타난다.
-**의미 있는 작업 단위(마일스톤, 기능, 버그 수정)가 끝날 때마다 별도 요청
-없이 `npm run deploy`까지 진행한다.** `wrangler`는 `CLOUDFLARE_API_TOKEN`
-환경변수 또는 `wrangler login`으로 인증되어 있어야 한다.
+**Cloudflare는 더 이상 배포 대상이 아니다.** (이전에 시도했던
+`dash.cloudflare.com/.../pages/view/fashion` Pages 프로젝트와
+`fitmate.s49139178.workers.dev` Workers 배포는 이 스택 전환으로 obsolete —
+정리하고 싶으면 Cloudflare 대시보드에서 수동으로 지우면 된다. 코드에는 더 이상
+Cloudflare 관련 설정이 없다.)
+
+HF Space 호출(`@gradio/client`), 배경 제거(`@imgly/background-removal-node`),
+`sharp` 등은 전부 일반 Node.js 런타임이 필요해 **Render.com Web Service**로
+배포한다. `render.yaml` (Blueprint)이 저장소 루트에 있다.
+
+- Build Command: `npm install && npm run build`
+- Start Command: `npm start` (`tsx src/server/index.ts` — API + `dist/client` 정적
+  서빙을 한 프로세스에서 처리)
+- 무료 티어는 일정 시간 요청이 없으면 슬립 → 첫 요청이 느릴 수 있다.
+- 계정 생성/GitHub 연결은 Render 대시보드에서 사용자가 직접 해야 한다
+  (`New Web Service` → 이 GitHub 레포 선택, 또는 `render.yaml`을 인식하는
+  `New Blueprint`). 연결 이후에는 `main` push마다 Render가 자동 재배포한다 —
+  Claude가 별도로 배포 명령을 실행할 필요 없음.
+- 환경변수: `TRYON_PROVIDER`(`mock` 기본값, 실제 배포는 `hf`), `HF_SPACE`
+  (기본 `yisol/IDM-VTON`), 필요 시 `HF_TOKEN`.
 
 ## 핵심 제약 (위반하면 안 되는 것들)
 
-1. **카탈로그는 100% 더미 데이터.** 무신사·29CM는 공개 상품 API가 없다
-   (확인 완료). 실제 스크래핑 금지. 유튜버(전현표입니다·깡스타일리스트 등)
-   스타일은 참고만 하고, 실명·실제 상품 링크는 절대 노출하지 않는다
-   (초상권/저작권 리스크).
-2. **Worker CPU 10ms 예산.** 요청 본문의 base64/멀티MB 페이로드를 Worker에서
-   파싱·조작하지 않는다. `multipart/form-data`로 받아 `Blob`을 그대로
-   통과시킨다.
-3. **얼굴 사진은 서버에 저장하지 않는다.** KV·R2·D1 바인딩을 추가하지 않는다
-   (의도적 부재). 로그에 이미지 바이트·base64·data URI를 남기지 않는다.
-   모든 `/api/*` 응답에 `Cache-Control: no-store`.
-4. **캐시는 클라이언트 IndexedDB 전용** (`src/client/lib/tryonCache.ts`).
-   키: `SHA-256(person photo)[:16] + topId + bottomId`.
-5. **피팅 프로바이더는 어댑터 패턴 뒤에 둔다** (`src/worker/providers/`).
-   기본값은 `mock`(마일스톤1). `workersai`(flux-2-klein-4b, 마일스톤5)는
-   `wrangler.jsonc`에 `ai` 바인딩을 다시 추가해야 동작한다 — 로컬
-   `vite dev`에서 `ai` 바인딩이 선언되면 실제 Cloudflare 계정 원격 프록시
-   (`CLOUDFLARE_API_TOKEN`)가 필요해지므로, mock만 쓰는 동안은 바인딩을
-   주석 처리해둔다.
-6. **무료 티어를 영구적이라 가정하지 않는다.** Gemini 이미지 모델은
-   2025-12부터 무료 티어가 없다(2026-07 기준). 체형 분석용
-   `gemini-2.5-flash`(텍스트·비전)는 무료. 피팅 생성은 Cloudflare Workers AI
-   `flux-2-klein-4b`(10,000 뉴런/일 무료)를 기본으로 한다.
+1. **카탈로그는 100% 더미 데이터.** `public/catalog/`의 실제 상품 사진(옷1·2,
+   바지1·2) + 임의로 붙인 브랜드/가격/사이즈표. 무신사·29CM 실제 스크래핑 금지.
+2. **얼굴 사진은 서버에 저장하지 않는다.** DB/파일 영속화 없음 — 업로드된 사진은
+   요청 처리 중 메모리에만 존재. 모든 `/api/*` 응답에 `Cache-Control: no-store`.
+3. **가상 피팅은 100% 무료 오픈소스 스택.**
+   - 체형 분석: `@tensorflow-models/pose-detection` MoveNet, 브라우저에서 실행
+     (서버 GPU 불필요). 의료용 정확도가 아니라 사이즈 추천 참고치.
+   - 합성: Hugging Face 공개 Space(`yisol/IDM-VTON`, 기본값)를 `@gradio/client`로
+     호출. **IDM-VTON은 CC BY-NC-SA 4.0(비상업적 용도 전용)** — 실제 상업 서비스
+     전환 시 반드시 재검토(`src/server/providers/hfSpace.ts` 주석 참고).
+     공개 데모라 콜드스타트/대기열로 느릴 수 있어 타임아웃+재시도가 붙어있다.
+   - 이 Space는 옷 하나만 입힐 수 있어 상의→하의 순으로 두 번 체이닝한다
+     (`src/server/routes/tryon.ts`).
+   - 유사 상품 추천: CLIP 임베딩(`assets/clothes_embeddings.json`) 코사인 유사도,
+     순수 JS 연산(`src/server/routes/similar.ts`) — GPU/외부 호출 없음. 임베딩은
+     `npm run embeddings`(로컬 CPU, `@xenova/transformers`)로 생성했고, 카탈로그가
+     커지면 `scripts/colab_clip_embeddings.ipynb`를 Colab 무료 GPU에서 돌려 같은
+     포맷으로 교체한다.
+   - 무드 보정: 합성 결과에서 배경 제거(`@imgly/background-removal-node`, Node
+     네이티브 — Python rembg 대체) 후 스튜디오 단색 배경 합성 + `무신사 스냅 1~10`
+     레퍼런스(`assets/mood-refs/`) 평균 톤에 30%만 근접시키는 밝기 보정
+     (`src/server/postprocess/mood.ts`). 톤 값은 `npm run mood-tone`으로 재계산.
+4. **프로바이더는 어댑터 패턴 뒤에 둔다** (`src/server/providers/`). 기본값은
+   `mock`(로컬 개발용, 플레이스홀더 SVG). 실제 배포는 `TRYON_PROVIDER=hf`.
 
 ## 로컬 개발
 
 ```
 npm install
-npm run dev      # vite dev — @cloudflare/vite-plugin이 워커+정적에셋 통합 서빙
+npm run dev          # vite(client, :5173) + tsx watch(server, :8787) 동시 실행
 npm run typecheck
+npm run test
 ```
 
-- `vite.config.ts`의 `cloudflare({ configPath: '../../wrangler.jsonc' })`는
-  필수다 — `root: 'src/client'`라서 플러그인이 기본 위치에서
-  `wrangler.jsonc`를 못 찾는다.
-- `npm install` 시 `workerd`/`esbuild`/`sharp`의 postinstall 스크립트가
+- `npm run dev:client` / `npm run dev:server`로 따로 띄울 수도 있음. vite dev
+  서버가 `/api/*`를 8787로 프록시한다(`vite.config.ts`).
+- `npm run build` → `dist/client/`에 정적 SPA 빌드. `npm start` → 그 정적 파일 +
+  API를 한 Node 프로세스로 서빙(`src/server/index.ts`).
+- `npm install` 시 `sharp`/`onnxruntime-node` 등 네이티브 바이너리 postinstall이
   allow-scripts 정책으로 막힐 수 있다. 막히면 `npm approve-scripts --all` 후
-  `npm install`을 다시 실행해야 실제 `workerd.exe` 바이너리가 설치된다
-  (승인 전에는 5KB짜리 JS 셔임만 있어서 `EFAULT` 소켓 에러가 난다).
-- Workers AI 응답을 만드는 `new Response(new Blob([...]))` 호출부에서
-  `Uint8Array<ArrayBufferLike>` → `BlobPart` 캐스팅이 필요하다 (TS5.7 lib.dom
-  제네릭 타입 이슈, `src/worker/routes/tryon.ts` 참고).
+  `npm install`을 다시 실행. **`sharp`가 두 버전(루트 0.33.x + `@imgly`/`@xenova`
+  중첩 의존성 0.32.x)으로 동시에 존재해서 `approve-scripts`가 계속 하나씩만
+  승인하며 왔다갔다할 수 있다** — 이럴 땐 `package.json`의 `allowScripts`에
+  두 버전을 직접 같이 적어주면 해결된다.
+- Windows에서 `sharp`/`libvips` 관련 `GLib-GObject-CRITICAL` 경고가 콘솔에 뜰 수
+  있는데 무해하다 (실제 이미지 처리 결과에는 영향 없음, 확인 완료).
+- `new Blob([buffer])`처럼 Node `Buffer`를 그대로 넘기면 TS5.7 lib.dom 제네릭
+  이슈로 `BlobPart` 타입 에러가 난다 — `buffer as unknown as ArrayBuffer`로
+  캐스팅해야 한다 (`src/server/routes/tryon.ts`, `postprocess/mood.ts` 참고).
+- `@imgly/background-removal-node`의 `removeBackground()`에 Buffer를 넘길 때도
+  `new Blob([buf], { type: 'image/png' })`처럼 **명시적으로 mime type을 지정**해야
+  한다 — 안 그러면 `Unsupported format:` 에러가 난다.
 
 ## 디렉터리
 
-- `src/shared/` — worker·client 공용 순수 함수/타입 (catalog, sizing,
-  recommend). 네트워크 없이 단위 테스트 가능하게 유지한다.
-- `src/worker/` — Hono API (`/api/analyze`, `/api/tryon`) + 피팅 프로바이더
-  어댑터.
-- `src/client/` — React SPA. 화면은 `screens/`, 재사용 컴포넌트는
-  `components/`, 순수 유틸은 `lib/`.
-- `public/catalog/` — 카탈로그 이미지. 마일스톤1은 SVG 플레이스홀더,
-  마일스톤3에서 실제 생성 이미지(webp)로 교체 예정.
+- `src/shared/` — client·server 공용 순수 함수/타입 (catalog, sizing, recommend).
+  네트워크 없이 단위 테스트 가능하게 유지한다.
+- `src/server/` — Hono API(`@hono/node-server`) + 정적 파일 서빙 + 피팅 프로바이더
+  어댑터 + 후처리.
+  - `routes/tryon.ts`, `routes/similar.ts`
+  - `providers/{mock,hfSpace}.ts`
+  - `postprocess/mood.ts`
+- `src/client/` — React SPA. `screens/`(화면), `components/`(재사용 컴포넌트),
+  `lib/`(순수 유틸 + MoveNet 연동).
+- `public/catalog/{tops,bottoms}/` — 카탈로그 상품 이미지 (실제 사진, 더미 상품
+  정보로 포장).
+- `assets/` — 빌드 산출물이 아닌 데이터 자산. `clothes_embeddings.json`(CLIP
+  임베딩), `mood-refs/`(무신사 스냅 10장 + 계산된 `tone.json`).
+- `scripts/` — 오프라인 1회성 스크립트: `computeEmbeddings.mjs`,
+  `computeMoodTone.mjs`, `colab_clip_embeddings.ipynb`.
 
 ## 디자인
 

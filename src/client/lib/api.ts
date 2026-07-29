@@ -1,20 +1,9 @@
-import type { UserProfile } from '../../shared/types';
-
-export async function analyzeProfile(height: number, weight: number): Promise<UserProfile> {
-  const form = new FormData();
-  form.set('height', String(height));
-  form.set('weight', String(weight));
-
-  const res = await fetch('/api/analyze', { method: 'POST', body: form });
-  if (!res.ok) throw new Error('분석 요청에 실패했습니다');
-  return res.json();
-}
+import type { CatalogItem } from '../../shared/types';
 
 export interface TryOnParams {
   person: Blob;
-  face: Blob;
-  top: Blob;
-  bottom: Blob;
+  topGarment: Blob;
+  bottomGarment: Blob;
   topDescription: string;
   bottomDescription: string;
 }
@@ -22,13 +11,18 @@ export interface TryOnParams {
 export async function requestTryOn(params: TryOnParams): Promise<Blob> {
   const form = new FormData();
   form.set('person', params.person, 'person.webp');
-  form.set('face', params.face, 'face.webp');
-  form.set('top', params.top, 'top.webp');
-  form.set('bottom', params.bottom, 'bottom.webp');
+  form.set('topGarment', params.topGarment, 'top.png');
+  form.set('bottomGarment', params.bottomGarment, 'bottom.png');
   form.set('topDescription', params.topDescription);
   form.set('bottomDescription', params.bottomDescription);
 
   const res = await fetch('/api/tryon', { method: 'POST', body: form });
   if (!res.ok) throw new Error('이미지 생성에 실패했습니다');
   return res.blob();
+}
+
+export async function fetchSimilar(itemId: string, n = 5): Promise<CatalogItem[]> {
+  const res = await fetch(`/api/similar/${itemId}?n=${n}`);
+  if (!res.ok) throw new Error('유사 상품을 불러오지 못했습니다');
+  return res.json();
 }

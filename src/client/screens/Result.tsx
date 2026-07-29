@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { CatalogItem, Outfit } from '../../shared/types';
-import { findSimilar } from '../../shared/recommend';
+import { fetchSimilar } from '../lib/api';
 import { GarmentHotspots } from '../components/GarmentHotspots';
 import { GarmentPanel } from '../components/GarmentPanel';
 
@@ -8,15 +8,30 @@ interface Props {
   imageUrl: string;
   regenerating: boolean;
   outfit: Outfit;
-  catalog: CatalogItem[];
   onSwap: (slot: 'top' | 'bottom', item: CatalogItem) => void;
   onRestart: () => void;
 }
 
-export function Result({ imageUrl, regenerating, outfit, catalog, onSwap, onRestart }: Props) {
+export function Result({ imageUrl, regenerating, outfit, onSwap, onRestart }: Props) {
   const [panel, setPanel] = useState<'top' | 'bottom' | null>(null);
+  const [similar, setSimilar] = useState<CatalogItem[]>([]);
 
   const active = panel === 'top' ? outfit.top : panel === 'bottom' ? outfit.bottom : null;
+
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    fetchSimilar(active.item.id, 5)
+      .then((result) => {
+        if (!cancelled) setSimilar(result);
+      })
+      .catch(() => {
+        if (!cancelled) setSimilar([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [active?.item.id]);
 
   return (
     <div className="screen">
@@ -56,7 +71,7 @@ export function Result({ imageUrl, regenerating, outfit, catalog, onSwap, onRest
         <GarmentPanel
           item={active.item}
           fit={active.fit}
-          similar={findSimilar(active.item, catalog, 5)}
+          similar={similar}
           onSelectSimilar={(item) => onSwap(panel!, item)}
         />
       )}

@@ -1,6 +1,6 @@
 import { fitSize } from './sizing';
 import type {
-  BodyType,
+  BmiClass,
   CatalogItem,
   Fit,
   Outfit,
@@ -13,14 +13,16 @@ import type {
 // ── 스타일 스코어링 ──────────────────────────────────────────────
 // 모든 상수는 근사 휴리스틱이며 튜닝 대상이다.
 
-const BODY_FIT_PRIORITY: Record<BodyType, Fit[]> = {
-  스트레이트: ['regular', 'slim', 'relaxed', 'oversized'],
-  웨이브: ['slim', 'regular', 'relaxed', 'oversized'],
-  내추럴: ['relaxed', 'oversized', 'regular', 'slim'],
+/** Gemini 비전 기반 체형 분류가 없으므로, BMI 구간으로 핏 우선순위를 근사한다. */
+const BMI_FIT_PRIORITY: Record<BmiClass, Fit[]> = {
+  저체중: ['slim', 'regular', 'relaxed', 'oversized'],
+  표준: ['regular', 'slim', 'relaxed', 'oversized'],
+  과체중: ['relaxed', 'regular', 'oversized', 'slim'],
+  비만: ['oversized', 'relaxed', 'regular', 'slim'],
 };
 
-function fitBodyScore(item: CatalogItem, bodyType: BodyType): number {
-  const priority = BODY_FIT_PRIORITY[bodyType];
+function fitBodyScore(item: CatalogItem, bmiClass: BmiClass): number {
+  const priority = BMI_FIT_PRIORITY[bmiClass];
   const rank = priority.indexOf(item.fit);
   if (rank === 0) return 30;
   if (rank === 1) return 18;
@@ -54,24 +56,12 @@ function torsoLegScore(item: CatalogItem, torsoToLegRatio: TorsoLeg): number {
   return item.category === 'top' ? 8 : 6;
 }
 
+/** MoveNet 포즈 인식에 성공했을 때만 실루엣 가점을 준다. 실패 시 중립값. */
 function silhouetteScore(item: CatalogItem, profile: UserProfile): number {
-  const shoulderHip = shoulderHipScore(item, profile.traits.shoulderVsHip);
-  const torsoLeg = torsoLegScore(item, profile.traits.torsoToLegRatio);
+  if (!profile.pose) return 10;
+  const shoulderHip = shoulderHipScore(item, profile.pose.shoulderVsHip);
+  const torsoLeg = torsoLegScore(item, profile.pose.torsoToLegRatio);
   return shoulderHip + torsoLeg; // 최대 20
-}
-
-function personalColorScore(item: CatalogItem, profile: UserProfile): number {
-  const tone = profile.traits.personalColor;
-  if (tone === '중성톤') return 14;
-  if (tone === '웜톤') {
-    if (item.colorTone === 'warm') return 20;
-    if (item.colorTone === 'neutral') return 12;
-    return 4;
-  }
-  // 쿨톤
-  if (item.colorTone === 'cool') return 20;
-  if (item.colorTone === 'neutral') return 12;
-  return 4;
 }
 
 function sizeAvailabilityScore(item: CatalogItem, profile: UserProfile): number {
@@ -102,9 +92,8 @@ function seasonScore(item: CatalogItem): number {
 
 export function scoreItem(item: CatalogItem, profile: UserProfile): number {
   return (
-    fitBodyScore(item, profile.traits.bodyType) +
+    fitBodyScore(item, profile.metrics.bmiClass) +
     silhouetteScore(item, profile) +
-    personalColorScore(item, profile) +
     sizeAvailabilityScore(item, profile) +
     seasonScore(item) +
     5 // 스타일 일관성 — 착장 조합 단계(pickOutfit)에서 실제로 반영됨
@@ -162,7 +151,9 @@ export function pickOutfit(catalog: CatalogItem[], profile: UserProfile): Outfit
   return { top: topScored, bottom: bottomScored };
 }
 
-// ── 유사 상품 ────────────────────────────────────────────────────
+// ── 유사 상품 (카탈로그가 작을 때의 폴백 휴리스틱) ──────────────────
+// 카탈로그가 커지면 src/server/routes/similar.ts의 CLIP 임베딩 코사인
+// 유사도가 우선 사용되고, 이 함수는 임베딩이 없는 아이템의 폴백으로 남는다.
 
 const FIT_ORDER: Fit[] = ['slim', 'regular', 'relaxed', 'oversized'];
 const NEUTRAL_COLORS = new Set(['black', 'gray', 'charcoal', 'white', 'beige', 'navy']);
@@ -190,7 +181,7 @@ function similarity(base: CatalogItem, candidate: CatalogItem): number {
   );
 }
 
-export function findSimilar(item: CatalogItem, catalog: CatalogItem[], n = 5): CatalogItem[] {
+export function findSimilarHeuristic(item: CatalogItem, catalog: CatalogItem[], n = 5): CatalogItem[] {
   return catalog
     .filter((candidate) => candidate.category === item.category && candidate.id !== item.id)
     .map((candidate) => ({ candidate, score: similarity(item, candidate) }))
