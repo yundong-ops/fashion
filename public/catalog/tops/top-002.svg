@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#ffffff"/>
+  <g transform="translate(256,256)">
+    <path d="M -100 -130 L -45 -155 Q 0 -130 45 -155 L 100 -130 L 120 -75 L 85 -55 L 78 140 L -78 140 L -85 -55 L -120 -75 Z"
+          fill="#3f3f46" stroke="#27272a" stroke-width="4"/>
+    <path d="M -45 -155 Q 0 -120 45 -155 L 32 -140 Q 0 -112 -32 -140 Z" fill="#ffffff"/>
+  </g>
+  <text x="256" y="480" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#a1a1aa">헤비웨이트 반팔 티 · 차콜</text>
+</svg>
