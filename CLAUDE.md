@@ -12,6 +12,19 @@ AI로 입혀서 보여줌 → 옷 클릭 시 상세정보 + 유사상품 5개 �
 **의미 있는 작업 단위(마일스톤, 기능, 버그 수정)가 끝날 때마다 별도 요청 없이
 서술적 커밋 메시지로 커밋하고 `main`에 `git push` 한다.**
 
+## 배포 — 자동 배포
+
+Cloudflare 계정 ID `0c031e9a0d4ee8e3b87ba4df5f923e22`.
+`https://dash.cloudflare.com/0c031e9a0d4ee8e3b87ba4df5f923e22/pages/view/fashion`
+은 Cloudflare **Pages** 프로젝트(`fashion`) 대시보드 링크이지만, 이 저장소는
+**Workers** 구성(`wrangler.jsonc`: `name: fitmate`, 정적에셋 바인딩 + Hono
+API)을 그대로 유지하기로 결정했다(2026-07-29). 따라서 배포는
+`npm run deploy`(= `wrangler deploy`)로 하며, 결과물은 위 Pages URL이 아니라
+Cloudflare 대시보드의 **Workers & Pages → `fitmate`** 항목에 나타난다.
+**의미 있는 작업 단위(마일스톤, 기능, 버그 수정)가 끝날 때마다 별도 요청
+없이 `npm run deploy`까지 진행한다.** `wrangler`는 `CLOUDFLARE_API_TOKEN`
+환경변수 또는 `wrangler login`으로 인증되어 있어야 한다.
+
 ## 핵심 제약 (위반하면 안 되는 것들)
 
 1. **카탈로그는 100% 더미 데이터.** 무신사·29CM는 공개 상품 API가 없다
