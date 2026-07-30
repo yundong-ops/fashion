@@ -35,6 +35,30 @@ async function fileDataToBuffer(entry: unknown): Promise<{ buffer: Buffer; mimeT
   throw new Error('HF Space 응답 형식을 해석할 수 없습니다');
 }
 
+/**
+ * Gradio 클라이언트는 실패 시 Error가 아니라 status 객체
+ * (`{ stage: 'error', message: "'IndexError'", ... }`)로 reject한다 —
+ * 그대로 두면 상위에서 "[object Object]"가 되므로 Error로 정규화한다.
+ */
+function toError(err: unknown): Error {
+  if (err instanceof Error) return err;
+  if (err && typeof err === 'object') {
+    const obj = err as Record<string, unknown>;
+    const detail =
+      (typeof obj.message === 'string' && obj.message) ||
+      (typeof obj.original_msg === 'string' && obj.original_msg) ||
+      (typeof obj.title === 'string' && obj.title) ||
+      '';
+    if (detail) return new Error(String(detail).replace(/^'|'$/g, ''));
+    try {
+      return new Error(JSON.stringify(obj));
+    } catch {
+      return new Error('알 수 없는 HF Space 오류');
+    }
+  }
+  return new Error(String(err));
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('HF Space 응답 시간 초과')), ms);
@@ -83,8 +107,13 @@ export function createHfSpaceProvider(env: ServerEnv): TryOnProvider {
       try {
         return await withTimeout(callOnce(env, input), TIMEOUT_MS);
       } catch (err) {
-        console.error('[hfSpace] 1차 시도 실패, 재시도:', err instanceof Error ? err.message : err);
-        return await withTimeout(callOnce(env, input), TIMEOUT_MS);
+        const first = toError(err);
+        console.error(`[hfSpace] 1차 시도 실패, 재시도: ${first.message}`);
+        try {
+          return await withTimeout(callOnce(env, input), TIMEOUT_MS);
+        } catch (retryErr) {
+          throw toError(retryErr);
+        }
       }
     },
   };

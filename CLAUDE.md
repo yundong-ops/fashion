@@ -61,6 +61,15 @@ HF Space 호출(`@gradio/client`), 배경 제거(`@imgly/background-removal-node
      호출. **IDM-VTON은 CC BY-NC-SA 4.0(비상업적 용도 전용)** — 실제 상업 서비스
      전환 시 반드시 재검토(`src/server/providers/hfSpace.ts` 주석 참고).
      공개 데모라 콜드스타트/대기열로 느릴 수 있어 타임아웃+재시도가 붙어있다.
+   - **⚠️ ZeroGPU 일일 할당량이 실질적인 최대 제약이다** (2026-07-30 실측):
+     합성 1회 = GPU 약 120초(상의·하의 2회 호출 × 각 ~60초)를 소모하고,
+     **익명 호출 할당량은 하루 몇 분 수준이라 하루 1~2회 합성하면 소진된다.**
+     소진되면 `You have exceeded your ZeroGPU quota` 에러가 나고 다음날까지
+     막힌다. `HF_TOKEN`(무료 계정 토큰)을 설정하면 할당량이 늘어나므로,
+     실제로 시연·배포할 거면 토큰 설정이 사실상 필수다. 더 많이 필요하면 HF Pro.
+     이 실패 유형은 `routes/tryon.ts`에서 429 + 한국어 안내로 처리한다.
+   - 실측 소요 시간: 합성 1회 총 **90~100초** (UI의 Progress 화면 문구도 이 수치
+     기준으로 맞춰져 있다 — 임의로 "10~30초" 같은 값으로 되돌리지 말 것).
    - 이 Space는 옷 하나만 입힐 수 있어 상의→하의 순으로 두 번 체이닝한다
      (`src/server/routes/tryon.ts`).
    - 유사 상품 추천: CLIP 임베딩(`assets/clothes_embeddings.json`) 코사인 유사도,
@@ -90,6 +99,11 @@ npm run test
   서버가 `/api/*`를 8787로 프록시한다(`vite.config.ts`).
 - `npm run build` → `dist/client/`에 정적 SPA 빌드. `npm start` → 그 정적 파일 +
   API를 한 Node 프로세스로 서빙(`src/server/index.ts`).
+- **`tsx watch`는 이 프로젝트에서 쓰지 않는다.** 프로젝트가 OneDrive 동기화 폴더
+  안에 있어서 `tsx watch`가 쓰는 chokidar 파일감시가 무한 정지한다(포트 바인딩도
+  안 되고 에러도 안 남, 그냥 영원히 멈춤 — Windows+OneDrive+chokidar의 알려진
+  조합 문제). 그래서 `dev:server`는 watch 없는 `tsx src/server/index.ts`다 —
+  서버 코드를 고치면 수동으로 재시작해야 한다.
 - `npm install` 시 `sharp`/`onnxruntime-node` 등 네이티브 바이너리 postinstall이
   allow-scripts 정책으로 막힐 수 있다. 막히면 `npm approve-scripts --all` 후
   `npm install`을 다시 실행. **`sharp`가 두 버전(루트 0.33.x + `@imgly`/`@xenova`

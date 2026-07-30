@@ -12,3 +12,7 @@ services:
         value: hf
       - key: HF_SPACE
         value: yisol/IDM-VTON
+      # ZeroGPU 익명 할당량은 하루 1~2회 합성이면 소진된다. Render 대시보드에서
+      # HF_TOKEN(huggingface.co/settings/tokens, 무료)을 직접 넣어야 실사용 가능.
+      - key: HF_TOKEN
+        sync: false
