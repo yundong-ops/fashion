@@ -72,8 +72,10 @@ HF Space 호출(`@gradio/client`), 배경 제거(`@imgly/background-removal-node
      네이티브 — Python rembg 대체) 후 스튜디오 단색 배경 합성 + `무신사 스냅 1~10`
      레퍼런스(`assets/mood-refs/`) 평균 톤에 30%만 근접시키는 밝기 보정
      (`src/server/postprocess/mood.ts`). 톤 값은 `npm run mood-tone`으로 재계산.
-4. **프로바이더는 어댑터 패턴 뒤에 둔다** (`src/server/providers/`). 기본값은
-   `mock`(로컬 개발용, 플레이스홀더 SVG). 실제 배포는 `TRYON_PROVIDER=hf`.
+4. **프로바이더는 어댑터 패턴 뒤에 둔다** (`src/server/providers/`). **기본값은
+   `hf`(실제 HF Space 합성)** — 로컬 개발 포함 별도 설정 없이 항상 진짜 합성이
+   된다. 네트워크 없이 UI만 빠르게 확인하고 싶을 때만 `TRYON_PROVIDER=mock`으로
+   플레이스홀더 SVG를 쓴다.
 
 ## 로컬 개발
 

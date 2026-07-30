@@ -8,7 +8,7 @@ export interface ServerEnv {
 export function loadEnv(): ServerEnv {
   return {
     port: Number(process.env.PORT ?? 8787),
-    tryonProvider: process.env.TRYON_PROVIDER ?? 'mock',
+    tryonProvider: process.env.TRYON_PROVIDER ?? 'hf',
     hfSpace: process.env.HF_SPACE ?? 'yisol/IDM-VTON',
     hfToken: process.env.HF_TOKEN,
   };
